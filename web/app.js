@@ -152,8 +152,33 @@ async function health() {
 
     const data = await response.json();
 
+    if (data.llmState === "ready") {
+      setStatus(
+        "AI準備完了 / " + data.device,
+        "ok"
+      );
+      return;
+    }
+
+    if (data.llmState === "loading") {
+      setStatus(
+        "AIモデルを準備中なのだ…",
+        "ok"
+      );
+      return;
+    }
+
+    if (data.llmState === "error") {
+      setStatus(
+        "AIモデル準備エラーなのだ: " +
+        (data.llmError || "不明なエラー"),
+        "bad"
+      );
+      return;
+    }
+
     setStatus(
-      "AIサーバー接続済み / " + data.device,
+      "AIサーバー接続済み / モデル待機中なのだ",
       "ok"
     );
   } catch {
@@ -495,4 +520,5 @@ $("mic").addEventListener(
 );
 
 health();
+setInterval(health, 1500);
 input.focus();
