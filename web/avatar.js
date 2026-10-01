@@ -332,6 +332,34 @@ class AvatarController {
           1200
         )
       );
+
+    const manager =
+      this.vrm?.expressionManager;
+
+    if (
+      manager &&
+      plan?.emotion
+    ) {
+      for (
+        const [name, value]
+        of Object.entries(
+          plan.emotion
+        )
+      ) {
+        try {
+          manager.setValue(
+            name,
+            THREE.MathUtils.clamp(
+              value,
+              0,
+              1
+            )
+          );
+        } catch {
+          // VRM expression presets are optional.
+        }
+      }
+    }
   }
 
   applyIdle(time, dt) {
