@@ -7,11 +7,15 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from llm_adapter import LLMAdapter
 from performance import build_performance
-from voicevox_adapter import VoicevoxAdapter, VoicevoxError
+from voicevox_adapter import (
+    VoicevoxAdapter,
+    VoicevoxError,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -19,10 +23,9 @@ WEB_DIR = BASE_DIR / "web"
 
 app = FastAPI(
     title="AI Zundamon Browser",
-    version="0.1.0",
+    version="0.1.1",
 )
 
-# Useful for GitHub Pages or another static host talking to this local server.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -31,17 +34,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Serve the browser app itself. No separate web server is required.
+app.mount(
+    "/web",
+    StaticFiles(directory=WEB_DIR),
+    name="web",
+)
+
 llm = LLMAdapter()
 voicevox = VoicevoxAdapter()
 
 
 class ChatMessage(BaseModel):
-    role: str = Field(pattern="^(user|assistant)$")
-    content: str = Field(min_length=1, max_length=4000)
+    role: str = Field(
+        pattern="^(user|assistant)$"
+    )
+    content: str = Field(
+        min_length=1,
+        max_length=4000,
+    )
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=4000)
+    message: str = Field(
+        min_length=1,
+        max_length=4000,
+    )
     history: list[ChatMessage] = Field(
         default_factory=list,
         max_length=12,
@@ -49,14 +67,20 @@ class ChatRequest(BaseModel):
 
 
 class TTSRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=1200)
+    text: str = Field(
+        min_length=1,
+        max_length=1200,
+    )
     speaker: int | None = None
 
 
 def sse(payload: dict) -> str:
     return (
         "data: "
-        + json.dumps(payload, ensure_ascii=False)
+        + json.dumps(
+            payload,
+            ensure_ascii=False,
+        )
         + "\n\n"
     )
 
@@ -64,13 +88,19 @@ def sse(payload: dict) -> str:
 def split_sentence(buffer: str):
     for index, char in enumerate(buffer):
         if char in "。！？!?\n":
-            return buffer[: index + 1], buffer[index + 1 :]
+            return (
+                buffer[: index + 1],
+                buffer[index + 1 :],
+            )
+
     return "", buffer
 
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(WEB_DIR / "index.html")
+    return FileResponse(
+        WEB_DIR / "index.html"
+    )
 
 
 @app.get("/api/health")
@@ -79,6 +109,7 @@ def health():
         "ok": True,
         "device": llm.device,
         "model": llm.model_name,
+        "llmLoaded": llm.model is not None,
         "voicevox": voicevox.health(),
     }
 
@@ -121,7 +152,9 @@ def chat_stream(request: ChatRequest):
                 })
 
                 while True:
-                    sentence, buffer = split_sentence(buffer)
+                    sentence, buffer = (
+                        split_sentence(buffer)
+                    )
 
                     if not sentence:
                         break
@@ -151,12 +184,16 @@ def chat_stream(request: ChatRequest):
         except Exception as exc:
             yield sse({
                 "type": "error",
-                "message": f"AI処理に失敗しました: {exc}",
+                "message": (
+                    f"AI処理に失敗しました: {exc}"
+                ),
             })
 
     return StreamingResponse(
         generate(),
-        media_type="text/event-stream; charset=utf-8",
+        media_type=(
+            "text/event-stream; charset=utf-8"
+        ),
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
@@ -176,7 +213,6 @@ def tts(request: TTSRequest):
             content=audio,
             media_type="audio/wav",
         )
-
     except VoicevoxError as exc:
         raise HTTPException(
             status_code=503,
@@ -189,7 +225,15 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "server:app",
-        host=os.getenv("AIZUNDA_HOST", "127.0.0.1"),
-        port=int(os.getenv("AIZUNDA_PORT", "8000")),
+        host=os.getenv(
+            "AIZUNDA_HOST",
+            "127.0.0.1",
+        ),
+        port=int(
+            os.getenv(
+                "AIZUNDA_PORT",
+                "8000",
+            )
+        ),
         reload=False,
     )
