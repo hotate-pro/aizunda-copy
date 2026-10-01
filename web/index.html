@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#6b8f34">
+  <title>AIずんだもん</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+      "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.5.5/lib/three-vrm.module.min.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div class="layout">
+    <section class="avatar-card">
+      <header class="header">
+        <div>
+          <div class="eyebrow">BROWSER AI TUBER</div>
+          <h1>AIずんだもん</h1>
+          <div id="status">起動中なのだ…</div>
+        </div>
+        <div id="serverState" class="state"></div>
+      </header>
+
+      <div class="stage">
+        <canvas id="canvas"></canvas>
+        <div id="empty" class="empty">
+          <b>VRMを開くのだ</b>
+          <span>下のボタンからVRMを読み込めるのだ</span>
+        </div>
+        <div id="emotion" class="emotion">平常</div>
+      </div>
+
+      <div class="toolbar">
+        <label class="button secondary">
+          VRMを開く
+          <input id="vrm" type="file" accept=".vrm" hidden>
+        </label>
+        <button id="reset" class="button secondary">ポーズを戻す</button>
+        <button id="settings" class="button secondary">接続設定</button>
+      </div>
+    </section>
+
+    <section class="chat-card">
+      <header class="chat-header">
+        <div>
+          <div class="eyebrow">BRAIN</div>
+          <h2>おはなし</h2>
+        </div>
+        <button id="clear" class="round">↺</button>
+      </header>
+
+      <div id="messages" class="messages">
+        <div class="message assistant">
+          <div class="who">ずんだもん</div>
+          <div class="bubble">こんにちはなのだ！ ぼくに質問してほしいのだ。</div>
+        </div>
+      </div>
+
+      <div class="composer">
+        <textarea id="input" rows="2" maxlength="4000" placeholder="質問を書くのだ…"></textarea>
+        <div class="composer-row">
+          <button id="mic" class="button secondary">🎙 音声入力</button>
+          <div></div>
+          <button id="send" class="button primary">送信</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <dialog id="dialog">
+    <form method="dialog" class="settings">
+      <div class="dialog-head">
+        <h2>接続設定</h2>
+        <button class="round">×</button>
+      </div>
+
+      <label>
+        AIサーバーURL
+        <input id="api" type="url">
+      </label>
+
+      <label>
+        VOICEVOX話者ID
+        <input id="speaker" type="number" min="0" step="1" value="3">
+      </label>
+
+      <p>ブラウザを別PCで開く場合は、ここにAIサーバーのURLを入れるのだ。</p>
+
+      <div class="dialog-actions">
+        <button class="button secondary">閉じる</button>
+        <button id="save" class="button primary" value="default">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="./avatar.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
