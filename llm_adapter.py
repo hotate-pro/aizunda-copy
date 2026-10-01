@@ -28,6 +28,16 @@ class LLMAdapter:
             "AIZUNDA_MODEL",
             "rinna/japanese-gpt-neox-3.6b-instruction-sft-v2",
         )
+
+        # The original project used the old SFT identifier.
+        # If an older .env still contains it, transparently migrate.
+        if (
+            self.model_name
+            == "rinna/japanese-gpt-neox-3.6b-instruction-sft"
+        ):
+            self.model_name = (
+                "rinna/japanese-gpt-neox-3.6b-instruction-sft-v2"
+            )
         self.max_new_tokens = int(
             os.getenv("AIZUNDA_MAX_NEW_TOKENS", "160")
         )
