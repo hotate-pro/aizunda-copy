@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -23,7 +28,7 @@ WEB_DIR = BASE_DIR / "web"
 
 app = FastAPI(
     title="AI Zundamon Browser",
-    version="0.1.1",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -34,7 +39,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve the browser app itself. No separate web server is required.
 app.mount(
     "/web",
     StaticFiles(directory=WEB_DIR),
@@ -96,6 +100,17 @@ def split_sentence(buffer: str):
     return "", buffer
 
 
+@app.on_event("startup")
+def warmup_model() -> None:
+    # Start model download/load in the background.
+    # The website remains immediately accessible.
+    threading.Thread(
+        target=llm.ensure_loaded,
+        daemon=True,
+        name="aizunda-model-loader",
+    ).start()
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(
@@ -110,7 +125,26 @@ def health():
         "device": llm.device,
         "model": llm.model_name,
         "llmLoaded": llm.model is not None,
+        "llmState": llm.state,
+        "llmError": llm.error,
         "voicevox": voicevox.health(),
+    }
+
+
+@app.post("/api/model/warmup")
+def model_warmup():
+    try:
+        llm.ensure_loaded()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
+
+    return {
+        "ok": True,
+        "state": llm.state,
+        "model": llm.model_name,
     }
 
 
