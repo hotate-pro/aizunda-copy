@@ -10,7 +10,10 @@ class AvatarController {
     this.plan = null;
     this.startedAt = 0;
     this.duration = 1;
-    this.cameraTargetY = 0.8;
+
+    this.rest = new Map();
+    this.blinkTimer = 0;
+    this.blinkUntil = 0;
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -74,6 +77,7 @@ class AvatarController {
     );
 
     this.resize();
+
     window.addEventListener(
       "resize",
       () => {
@@ -96,14 +100,10 @@ class AvatarController {
     const rect =
       canvas.getBoundingClientRect();
 
-    const width = Math.max(
-      1,
-      rect.width
-    );
-    const height = Math.max(
-      1,
-      rect.height
-    );
+    const width =
+      Math.max(1, rect.width);
+    const height =
+      Math.max(1, rect.height);
 
     this.renderer.setSize(
       width,
@@ -151,10 +151,6 @@ class AvatarController {
     this.vrm = next;
     this.vrm.scene.rotation.y =
       Math.PI;
-
-    // VRMs do not all use the same origin.
-    // Fit the model from its real bounding box
-    // instead of applying a fixed -1m Y offset.
     this.vrm.scene.position.set(
       0,
       0,
@@ -171,10 +167,42 @@ class AvatarController {
       this.vrm.scene
     );
 
+    this.captureRestPose();
     this.fitModelToGround();
     this.fitCamera();
 
     return this.vrm;
+  }
+
+  captureRestPose() {
+    this.rest.clear();
+
+    if (!this.vrm?.humanoid) {
+      return;
+    }
+
+    for (const name of [
+      "hips",
+      "chest",
+      "head",
+      "leftUpperArm",
+      "rightUpperArm",
+      "leftLowerArm",
+      "rightLowerArm"
+    ]) {
+      const bone =
+        this.vrm.humanoid
+          .getNormalizedBoneNode(
+            name
+          );
+
+      if (bone) {
+        this.rest.set(
+          name,
+          bone.quaternion.clone()
+        );
+      }
+    }
   }
 
   fitModelToGround() {
@@ -191,8 +219,6 @@ class AvatarController {
       return;
     }
 
-    // Ground is at y = -1.
-    // Move the actual lowest mesh point to the ground.
     this.vrm.scene.position.y +=
       -1 - box.min.y;
   }
@@ -209,7 +235,6 @@ class AvatarController {
 
     const size =
       new THREE.Vector3();
-
     const center =
       new THREE.Vector3();
 
@@ -217,40 +242,79 @@ class AvatarController {
     box.getCenter(center);
 
     const height =
-      Math.max(size.y, 1);
+      Math.max(1, size.y);
 
-    this.cameraTargetY =
-      center.y + height * 0.03;
+    const targetY =
+      center.y + height * 0.02;
 
     const fov =
       THREE.MathUtils.degToRad(
         this.camera.fov
       );
 
-    const visibleHeight =
-      Math.max(
-        height * 1.12,
-        0.5
-      );
-
     const distance =
-      visibleHeight /
-      (2 * Math.tan(fov / 2));
+      Math.max(
+        2.2,
+        (height * 1.10) /
+          (2 * Math.tan(fov / 2))
+      );
 
     this.camera.position.set(
       0,
-      this.cameraTargetY,
-      Math.max(
-        2.2,
-        distance
-      )
+      targetY,
+      distance
     );
 
     this.camera.lookAt(
       0,
-      this.cameraTargetY,
+      targetY,
       0
     );
+  }
+
+  setBoneOffset(
+    name,
+    x,
+    y,
+    z
+  ) {
+    const bone =
+      this.vrm?.humanoid
+        ?.getNormalizedBoneNode(
+          name
+        );
+
+    if (!bone) {
+      return;
+    }
+
+    const rest =
+      this.rest.get(name);
+
+    if (rest) {
+      bone.quaternion.copy(rest);
+    }
+
+    bone.rotation.x +=
+      THREE.MathUtils.clamp(
+        x,
+        -0.9,
+        0.9
+      );
+
+    bone.rotation.y +=
+      THREE.MathUtils.clamp(
+        y,
+        -0.9,
+        0.9
+      );
+
+    bone.rotation.z +=
+      THREE.MathUtils.clamp(
+        z,
+        -0.9,
+        0.9
+      );
   }
 
   apply(plan) {
@@ -268,77 +332,108 @@ class AvatarController {
           1200
         )
       );
-
-    if (!this.vrm) {
-      return;
-    }
-
-    const manager =
-      this.vrm.expressionManager;
-
-    if (
-      manager &&
-      plan?.emotion
-    ) {
-      for (
-        const [name, value]
-        of Object.entries(
-          plan.emotion
-        )
-      ) {
-        try {
-          manager.setValue(
-            name,
-            THREE.MathUtils.clamp(
-              value,
-              0,
-              1
-            )
-          );
-        } catch {
-          // VRM expression presets differ by model.
-        }
-      }
-    }
   }
 
-  resetPose() {
-    this.plan = null;
-
+  applyIdle(time, dt) {
     if (!this.vrm?.humanoid) {
       return;
     }
 
-    for (
-      const name of [
-        "head",
-        "chest",
-        "leftUpperArm",
-        "rightUpperArm"
-      ]
-    ) {
-      const bone =
-        this.vrm.humanoid
-          .getNormalizedBoneNode(
-            name
-          );
+    const breathing =
+      Math.sin(time / 850) * 0.025;
 
-      if (bone) {
-        bone.rotation.set(
-          0,
-          0,
-          0
+    const sway =
+      Math.sin(time / 1700) * 0.018;
+
+    const nod =
+      Math.sin(time / 2300) * 0.018;
+
+    this.setBoneOffset(
+      "hips",
+      breathing * 0.12,
+      0,
+      sway * 0.7
+    );
+
+    this.setBoneOffset(
+      "chest",
+      -breathing * 0.35,
+      0,
+      sway
+    );
+
+    this.setBoneOffset(
+      "head",
+      nod,
+      sway * 0.4,
+      -sway * 0.55
+    );
+
+    this.setBoneOffset(
+      "leftUpperArm",
+      0,
+      0,
+      Math.sin(time / 1500) * 0.025
+    );
+
+    this.setBoneOffset(
+      "rightUpperArm",
+      0,
+      0,
+      -Math.sin(time / 1500) * 0.025
+    );
+
+    this.updateBlink(time);
+  }
+
+  updateBlink(time) {
+    const manager =
+      this.vrm?.expressionManager;
+
+    if (!manager) {
+      return;
+    }
+
+    if (
+      time > this.blinkTimer
+    ) {
+      this.blinkTimer =
+        time +
+        2800 +
+        Math.random() * 2600;
+      this.blinkUntil =
+        time + 130;
+    }
+
+    const closing =
+      time < this.blinkUntil
+        ? 1
+        : 0;
+
+    const presets = [
+      "blink",
+      "Blink",
+      "happyBlink"
+    ];
+
+    for (const preset of presets) {
+      try {
+        manager.setValue(
+          preset,
+          closing
         );
+      } catch {
+        // Expression is optional.
       }
     }
   }
 
-  update() {
+  applyPlan() {
     if (
-      !this.vrm ||
+      !this.vrm?.humanoid ||
       !this.plan?.keyframes
     ) {
-      return;
+      return false;
     }
 
     const time =
@@ -369,8 +464,7 @@ class AvatarController {
           frames[i + 1].t
       ) {
         a = frames[i];
-        b =
-          frames[i + 1];
+        b = frames[i + 1];
         break;
       }
     }
@@ -389,30 +483,12 @@ class AvatarController {
         1
       );
 
-    if (!this.vrm.humanoid) {
-      return;
-    }
-
-    const boneNames = [
+    for (const name of [
       "head",
       "chest",
       "leftUpperArm",
       "rightUpperArm"
-    ];
-
-    for (
-      const name of boneNames
-    ) {
-      const bone =
-        this.vrm.humanoid
-          .getNormalizedBoneNode(
-            name
-          );
-
-      if (!bone) {
-        continue;
-      }
-
+    ]) {
       const av =
         a.bones?.[name] ||
         [0, 0, 0];
@@ -421,48 +497,52 @@ class AvatarController {
         b.bones?.[name] ||
         av;
 
-      const rx =
-        THREE.MathUtils.clamp(
-          THREE.MathUtils.lerp(
-            av[0],
-            bv[0],
-            local
-          ),
-          -0.9,
-          0.9
-        );
-
-      const ry =
-        THREE.MathUtils.clamp(
-          THREE.MathUtils.lerp(
-            av[1],
-            bv[1],
-            local
-          ),
-          -0.9,
-          0.9
-        );
-
-      const rz =
-        THREE.MathUtils.clamp(
-          THREE.MathUtils.lerp(
-            av[2],
-            bv[2],
-            local
-          ),
-          -0.9,
-          0.9
-        );
-
-      bone.rotation.set(
-        rx,
-        ry,
-        rz
+      this.setBoneOffset(
+        name,
+        THREE.MathUtils.lerp(
+          av[0],
+          bv[0],
+          local
+        ),
+        THREE.MathUtils.lerp(
+          av[1],
+          bv[1],
+          local
+        ),
+        THREE.MathUtils.lerp(
+          av[2],
+          bv[2],
+          local
+        )
       );
     }
 
     if (time >= 1) {
       this.plan = null;
+      return false;
+    }
+
+    return true;
+  }
+
+  resetPose() {
+    this.plan = null;
+
+    for (
+      const [name, quaternion]
+      of this.rest
+    ) {
+      const bone =
+        this.vrm?.humanoid
+          ?.getNormalizedBoneNode(
+            name
+          );
+
+      if (bone) {
+        bone.quaternion.copy(
+          quaternion
+        );
+      }
     }
   }
 
@@ -472,28 +552,17 @@ class AvatarController {
 
     this.last = time;
 
-    this.update();
+    const performing =
+      this.applyPlan();
+
+    if (!performing) {
+      this.applyIdle(time, dt);
+    }
 
     if (this.vrm) {
-      this.vrm.update(dt);
-
-      if (
-        !this.plan &&
-        this.vrm.humanoid
-      ) {
-        const head =
-          this.vrm.humanoid
-            .getNormalizedBoneNode(
-              "head"
-            );
-
-        if (head) {
-          head.rotation.z =
-            Math.sin(
-              time / 2100
-            ) * 0.035;
-        }
-      }
+      this.vrm.update(
+        Math.max(0, dt)
+      );
     }
 
     this.renderer.render(
@@ -502,8 +571,7 @@ class AvatarController {
     );
 
     requestAnimationFrame(
-      (next) =>
-        this.frame(next)
+      (next) => this.frame(next)
     );
   }
 }
