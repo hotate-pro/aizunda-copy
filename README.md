@@ -53,6 +53,8 @@ http://127.0.0.1:8000/
 
 初回のAI利用時には、既定のHugging Faceモデルが必要になります。
 
+現在の既定モデルは `rinna/japanese-gpt-neox-3.6b-instruction-sft-v2` です。旧バージョンのモデルIDが `.env` に残っていても、サーバー側でv2へ自動移行します。
+
 既定値:
 
 ```
