@@ -22,9 +22,11 @@ SYSTEM_PROMPT = """あなたはブラウザで動くAIずんだもんなのだ�
 
 class LLMAdapter:
     def __init__(self) -> None:
+        # The old repository used the original SFT model ID.
+        # The currently published Rinna 3.6B instruction model is the v2 ID.
         self.model_name = os.getenv(
             "AIZUNDA_MODEL",
-            "rinna/japanese-gpt-neox-3.6b-instruction-sft",
+            "rinna/japanese-gpt-neox-3.6b-instruction-sft-v2",
         )
         self.max_new_tokens = int(
             os.getenv("AIZUNDA_MAX_NEW_TOKENS", "160")
@@ -40,8 +42,7 @@ class LLMAdapter:
             "cuda" if torch.cuda.is_available() else "cpu"
         )
 
-        # Load only when the first AI request arrives.
-        # This keeps the browser UI fast even on a fresh machine.
+        # Do not download/load the model just to open the web page.
         self.tokenizer = None
         self.model = None
         self._load_lock = threading.Lock()
@@ -78,6 +79,8 @@ class LLMAdapter:
         message: str,
         history: list[dict[str, str]],
     ) -> str:
+        # Rinna's model card uses a dialogue format ending in
+        # "システム: " for generation.
         prompt = (
             f"システム: {SYSTEM_PROMPT}<NL>"
         )
